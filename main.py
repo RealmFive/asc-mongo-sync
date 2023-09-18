@@ -8,7 +8,6 @@ def get_sync_start(collection):
     return (datetime.now() - timedelta(days=7)).astimezone(timezone.utc)
   
   latest_sync_status = collection.find().sort("syncStop", -1).limit(1)
-
   return latest_sync_status[0]["syncStop"]
 
 def sync_databases(source_db, source_collection, destination_db):
@@ -17,8 +16,8 @@ def sync_databases(source_db, source_collection, destination_db):
     destination_col= destination_db[col]
 
     docs = source_col.find({'updatedAt': {'$gte': sync_start, '$lt': sync_stop}})
-
     updates = [ReplaceOne({"_id": doc["_id"]}, doc, upsert = True) for doc in docs]
+
     if len(updates) > 0: destination_col.bulk_write(updates)
 
 script_start = datetime.now(tz=timezone.utc)
