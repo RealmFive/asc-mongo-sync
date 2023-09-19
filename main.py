@@ -1,7 +1,7 @@
 import os
 from pymongo import MongoClient, ReplaceOne
 from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 def get_sync_start(collection):
   if os.getenv("SYNC_START") is not None:
