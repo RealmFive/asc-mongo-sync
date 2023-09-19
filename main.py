@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
 def get_sync_start(collection):
-  if collection.count_documents({}) == 0:
-    return (datetime.now() - timedelta(days=7)).astimezone(timezone.utc)
+  if os.getenv("SYNC_START") is not None:
+    return datetime.fromisoformat(os.getenv("SYNC_START")).astimezone(timezone.utc)
   
   latest_sync_status = collection.find().sort("syncStop", -1).limit(1)
   return latest_sync_status[0]["syncStop"]
