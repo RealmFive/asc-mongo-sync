@@ -1,9 +1,17 @@
 import os
 from pymongo import MongoClient, ReplaceOne
 from dotenv import load_dotenv
+import sys
 from datetime import datetime, timezone
 
 class DatabaseSync:
+
+  # List of environmental variables that are required
+  #  for the app to run
+  REQUIRED_ENVIRONMENTAL_VARIABLES = ["CLOUD_DATABASE_URI",
+                                      "LOCAL_DATABASE_URI"
+                                      ]
+
   def get_sync_start(collection):
     if os.getenv("SYNC_START") is not None:
       return datetime.fromisoformat(os.getenv("SYNC_START")).astimezone(timezone.utc)
@@ -31,11 +39,25 @@ class DatabaseSync:
 
     collection.insert_one(sync_status)
 
-  def run():
+  @classmethod
+  def check_start_conditions(cls):
+    result = True
+    for variable_name in cls.REQUIRED_ENVIRONMENTAL_VARIABLES:
+      if os.getenv(variable_name) is None:
+        sys.stderr.write('Environmental variable {} is not set!\n'.format( variable_name ))
+        result = False
+    return result
+
+  @classmethod
+  def run(cls):
+
     script_start = datetime.now(tz=timezone.utc)
     sync_stop = script_start
 
     load_dotenv()
+    if cls.check_start_conditions() is False:
+      sys.exit(1)
+
 
     cloud_client = MongoClient(os.getenv("CLOUD_DATABASE_URI"))
     cloud_db = cloud_client["optrack"]
