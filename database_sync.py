@@ -29,8 +29,8 @@ class DatabaseSync:
       print('No syncStop found, starting from now')
       return datetime.now().astimezone(timezone.utc)
 
-  def sync_databases(source_db, source_collection, destination_db, sync_start, sync_stop):
-    for col in source_collection:
+  def sync_databases(source_db, source_collections, destination_db, sync_start, sync_stop):
+    for col in source_collections:
       print('Processing collection {}'.format( col ))
       source_col = source_db[col]
       destination_col= destination_db[col]
@@ -61,7 +61,8 @@ class DatabaseSync:
 
   @classmethod
   def preprocess_collections_list_input(cls, input:str)->list:
-    elements = input.split(' ')
+    elements = [ item.strip() for item in input.split(' ') ]
+    elements = [ item for item in elements if len(item) > 0 ]
     return elements
 
   @classmethod
@@ -87,9 +88,16 @@ class DatabaseSync:
 
     print('Starting the sync...')
     sync_start = DatabaseSync.get_sync_start(sync_status_collection)
-    print('Syncing from CLOUD -> LOCAL')
-    DatabaseSync.sync_databases(cloud_db, cloud_collections, local_db, sync_start, sync_stop) # sync from cloud to local
-    print('Syncing LOCAL -> CLOUD')
-    DatabaseSync.sync_databases(local_db, local_collections, cloud_db, sync_start, sync_stop) # sync from local to cloud
+    if len(cloud_collections) > 0:
+      print('Syncing from CLOUD -> LOCAL: {}'.format( cloud_collections ))
+      DatabaseSync.sync_databases(cloud_db, cloud_collections, local_db, sync_start, sync_stop) # sync from cloud to local
+    else:
+      print('No cloud collections to be synced')
+
+    if len(local_collections) > 0:
+      print('Syncing LOCAL -> CLOUD: {}'.format( local_collections ))
+      DatabaseSync.sync_databases(local_db, local_collections, cloud_db, sync_start, sync_stop) # sync from local to cloud
+    else:
+      print('No local collections to be synced')
     print('Updating sync status')
     DatabaseSync.insert_sync_status(sync_status_collection, sync_start, sync_stop, script_start)
