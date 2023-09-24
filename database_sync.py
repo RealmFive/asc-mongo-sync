@@ -3,24 +3,35 @@ from pymongo import MongoClient, ReplaceOne
 from dotenv import load_dotenv
 import sys
 from datetime import datetime, timezone
+import re
 
 class DatabaseSync:
 
   # List of environmental variables that are required
   #  for the app to run
   REQUIRED_ENVIRONMENTAL_VARIABLES = ["CLOUD_DATABASE_URI",
-                                      "LOCAL_DATABASE_URI"
+                                      "LOCAL_DATABASE_URI",
+                                      "CLOUD_DB_NAME",
+                                      "LOCAL_DB_NAME",
+                                      "CLOUD_TO_LOCAL_COLLECTIONS",
+                                      "LOCAL_TO_CLOUD_COLLECTIONS"
                                       ]
 
   def get_sync_start(collection):
-    if os.getenv("SYNC_START") is not None:
-      return datetime.fromisoformat(os.getenv("SYNC_START")).astimezone(timezone.utc)
+    print('Getting sync start...')
+    if os.environ.get("SYNC_START", None) is not None:
+      return datetime.fromisoformat(os.environ["SYNC_START"]).astimezone(timezone.utc)
     
-    latest_sync_status = collection.find().sort("syncStop", -1).limit(1)
-    return latest_sync_status[0]["syncStop"]
+    latest_sync_status = list(collection.find().sort("syncStop", -1).limit(1))
+    if len(latest_sync_status) > 0:
+      return latest_sync_status[0]["syncStop"]
+    else:
+      print('No syncStop found, starting from now')
+      return datetime.now().astimezone(timezone.utc)
 
   def sync_databases(source_db, source_collection, destination_db, sync_start, sync_stop):
     for col in source_collection:
+      print('Processing collection {}'.format( col ))
       source_col = source_db[col]
       destination_col= destination_db[col]
 
@@ -49,6 +60,11 @@ class DatabaseSync:
     return result
 
   @classmethod
+  def preprocess_collections_list_input(cls, input:str)->list:
+    elements = input.split(' ')
+    return elements
+
+  @classmethod
   def run(cls):
 
     script_start = datetime.now(tz=timezone.utc)
@@ -59,18 +75,21 @@ class DatabaseSync:
       sys.exit(1)
 
 
-    cloud_client = MongoClient(os.getenv("CLOUD_DATABASE_URI"))
-    cloud_db = cloud_client["optrack"]
-    cloud_collections = ["boundaries", "devices", "installations", "members", "organizations", "scalehouses"]
+    cloud_client = MongoClient(os.environ["CLOUD_DATABASE_URI"])
+    cloud_db = cloud_client[ os.environ["CLOUD_DB_NAME"] ]
+    cloud_collections = cls.preprocess_collections_list_input(os.environ['CLOUD_TO_LOCAL_COLLECTIONS'])
 
-    local_client = MongoClient(os.getenv("LOCAL_DATABASE_URI"))
-    local_db = local_client["optrack"]
-    local_collections = ["loadtickets", "scaleEvents"]
+    local_client = MongoClient(os.environ["LOCAL_DATABASE_URI"])
+    local_db = local_client[ os.environ["LOCAL_DB_NAME"] ]
+    local_collections = cls.preprocess_collections_list_input( os.environ['LOCAL_TO_CLOUD_COLLECTIONS'] )
 
     sync_status_collection = local_db["syncstatus"]
+
+    print('Starting the sync...')
     sync_start = DatabaseSync.get_sync_start(sync_status_collection)
-
+    print('Syncing from CLOUD -> LOCAL')
     DatabaseSync.sync_databases(cloud_db, cloud_collections, local_db, sync_start, sync_stop) # sync from cloud to local
+    print('Syncing LOCAL -> CLOUD')
     DatabaseSync.sync_databases(local_db, local_collections, cloud_db, sync_start, sync_stop) # sync from local to cloud
-
+    print('Updating sync status')
     DatabaseSync.insert_sync_status(sync_status_collection, sync_start, sync_stop, script_start)
