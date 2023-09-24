@@ -11,16 +11,13 @@ class DatabaseSync:
   #  for the app to run
   REQUIRED_ENVIRONMENTAL_VARIABLES = ["CLOUD_DATABASE_URI",
                                       "LOCAL_DATABASE_URI",
-                                      "CLOUD_DB_NAME",
-                                      "LOCAL_DB_NAME",
-                                      "CLOUD_TO_LOCAL_COLLECTIONS",
-                                      "LOCAL_TO_CLOUD_COLLECTIONS"
                                       ]
 
-  def get_sync_start(collection):
+  def get_sync_start(collection, sync_start=None):
     print('Getting sync start...')
-    if os.environ.get("SYNC_START", None) is not None:
-      return datetime.fromisoformat(os.environ["SYNC_START"]).astimezone(timezone.utc)
+    vars_sync_start = os.environ.get("SYNC_START", sync_start)
+    if vars_sync_start is not None:
+      return datetime.fromisoformat(vars_sync_start).astimezone(timezone.utc)
     
     latest_sync_status = list(collection.find().sort("syncStop", -1).limit(1))
     if len(latest_sync_status) > 0:
@@ -66,7 +63,7 @@ class DatabaseSync:
     return elements
 
   @classmethod
-  def run(cls):
+  def run(cls, cloud_db_name:str, local_db_name:str, c2l_collections:str, l2c_collections:str, sync_start=None):
 
     script_start = datetime.now(tz=timezone.utc)
     sync_stop = script_start
@@ -77,17 +74,18 @@ class DatabaseSync:
 
 
     cloud_client = MongoClient(os.environ["CLOUD_DATABASE_URI"])
-    cloud_db = cloud_client[ os.environ["CLOUD_DB_NAME"] ]
-    cloud_collections = cls.preprocess_collections_list_input(os.environ['CLOUD_TO_LOCAL_COLLECTIONS'])
+    cloud_db = cloud_client[ cloud_db_name ]
+    cloud_collections = cls.preprocess_collections_list_input( c2l_collections )
 
     local_client = MongoClient(os.environ["LOCAL_DATABASE_URI"])
-    local_db = local_client[ os.environ["LOCAL_DB_NAME"] ]
-    local_collections = cls.preprocess_collections_list_input( os.environ['LOCAL_TO_CLOUD_COLLECTIONS'] )
+    local_db = local_client[ local_db_name ]
+    local_collections = cls.preprocess_collections_list_input( l2c_collections )
 
     sync_status_collection = local_db["syncstatus"]
 
     print('Starting the sync...')
-    sync_start = DatabaseSync.get_sync_start(sync_status_collection)
+    sync_start = DatabaseSync.get_sync_start(sync_status_collection, sync_start)
+    print('Sync start: {}'.format( sync_start ))
     if len(cloud_collections) > 0:
       print('Syncing from CLOUD -> LOCAL: {}'.format( cloud_collections ))
       DatabaseSync.sync_databases(cloud_db, cloud_collections, local_db, sync_start, sync_stop) # sync from cloud to local
